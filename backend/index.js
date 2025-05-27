@@ -22,13 +22,26 @@ if (!fs.existsSync(downloadsDir)) {
 const corsOptions = {
     origin: [
         'http://localhost:5173',
-        'https://download-media-frontend.vercel.app' // <--- tu dominio de Vercel
+        'https://download-media-frontend.vercel.app'
     ],
-    methods: ['GET', 'POST'],
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
+    credentials: false, // o true si usas cookies o Authorization
 };
 
+
+
 app.use(cors(corsOptions));
+
+
+app.options(/^\/.*$/, (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.sendStatus(200);
+});
+
+
 
 app.use(express.json());
 
