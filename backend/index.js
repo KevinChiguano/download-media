@@ -20,7 +20,10 @@ if (!fs.existsSync(downloadsDir)) {
 }
 
 const corsOptions = {
-    origin: 'http://localhost:5173', // Cambia este puerto si tu frontend usa otro
+    origin: [
+        'http://localhost:5173',
+        'https://download-media-frontend.vercel.app' // <--- tu dominio de Vercel
+    ],
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type'],
 };
