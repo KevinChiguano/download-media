@@ -15,6 +15,8 @@ const binDir = path.join(__dirname, "bin");
 const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
 const ffmpegDir = binDir;
 
+const cookiesPath = path.join(__dirname, "cookies.txt");
+
 // Configuración de argumentos base
 const getBaseArgs = () => {
     // Usamos suplantación de clientes móviles (android/ios) para saltar el bloqueo de bots
