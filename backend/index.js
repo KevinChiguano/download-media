@@ -18,7 +18,7 @@ const ffmpegDir = binDir;
 // Detectar cookies
 const cookiesPath = path.join(__dirname, "cookies.txt");
 const getBaseArgs = () => {
-    const args = ["--js-runtimes", "nodejs"];
+    const args = ["--js-runtimes", "node"];
     if (fs.existsSync(cookiesPath)) {
         args.push("--cookies", cookiesPath);
     }
