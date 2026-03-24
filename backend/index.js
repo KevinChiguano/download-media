@@ -8,9 +8,11 @@ const { v4: uuidv4 } = require("uuid");
 const app = express();
 const PORT = 3001;
 
+const isWindows = process.platform === 'win32';
 const binDir = path.join(__dirname, "bin");
-const ytDlpPath = path.join(binDir, "yt-dlp.exe");
-const ffmpegPath = path.join(binDir, "ffmpeg.exe");
+
+// En Windows usa los ejecutables locales, en Linux y otros asume que están instalados globalmente
+const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
 const ffmpegDir = binDir;
 
 // Crear directorio de descargas si no existe
@@ -22,7 +24,9 @@ if (!fs.existsSync(downloadsDir)) {
 const corsOptions = {
     origin: [
         'http://localhost:5173',
-        'https://download-media-frontend.vercel.app'
+        'https://download-media-frontend.vercel.app',
+        'http://download-media.kpccdev.com',
+        'https://download-media.kpccdev.com'
     ],
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
@@ -100,9 +104,12 @@ app.post("/api/download", async (req, res) => {
 
         const ytdlpArgs = [
             url,
-            "-o", outputPath,
-            "--ffmpeg-location", ffmpegDir,
+            "-o", outputPath
         ];
+
+        if (isWindows) {
+            ytdlpArgs.push("--ffmpeg-location", ffmpegDir);
+        }
 
         if (format === "mp3") {
             ytdlpArgs.push("-x", "--audio-format", "mp3", "--embed-thumbnail", "--add-metadata");
