@@ -15,6 +15,10 @@ const binDir = path.join(__dirname, "bin");
 const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
 const ffmpegDir = binDir;
 
+// Detectar cookies
+const cookiesPath = path.join(__dirname, "cookies.txt");
+const getBaseArgs = () => fs.existsSync(cookiesPath) ? ["--cookies", cookiesPath] : [];
+
 // Crear directorio de descargas si no existe
 const downloadsDir = path.join(__dirname, "downloads");
 if (!fs.existsSync(downloadsDir)) {
@@ -56,7 +60,8 @@ app.post("/api/thumbnail", (req, res) => {
 
     console.log("Obteniendo miniatura para:", url);
 
-    execFile(ytDlpPath, ["--dump-json", url], (err, stdout, stderr) => {
+    const args = [...getBaseArgs(), "--dump-json", url];
+    execFile(ytDlpPath, args, (err, stdout, stderr) => {
         if (err) {
             console.error("yt-dlp error:", err);
             console.error("stderr:", stderr);
@@ -81,7 +86,8 @@ app.post("/api/download", async (req, res) => {
     if (!url || !format) return res.status(400).json({ error: "Faltan parámetros" });
 
     // Paso 1: obtener información del video (incluye el título)
-    execFile(ytDlpPath, ["--dump-json", url], (err, stdout) => {
+    const dumpArgs = [...getBaseArgs(), "--dump-json", url];
+    execFile(ytDlpPath, dumpArgs, (err, stdout) => {
         if (err) {
             console.error("yt-dlp error:", err);
             return res.status(500).json({ error: "Error al obtener información del video" });
@@ -103,6 +109,7 @@ app.post("/api/download", async (req, res) => {
         const outputPath = path.join(downloadsDir, outputName);
 
         const ytdlpArgs = [
+            ...getBaseArgs(),
             url,
             "-o", outputPath
         ];
@@ -167,7 +174,8 @@ app.post("/api/title", (req, res) => {
     const { url, format } = req.body;
     if (!url || !format) return res.status(400).json({ error: "Faltan parámetros" });
 
-    execFile(ytDlpPath, ["--dump-json", url], (err, stdout) => {
+    const args = [...getBaseArgs(), "--dump-json", url];
+    execFile(ytDlpPath, args, (err, stdout) => {
         if (err) {
             return res.status(500).json({ error: "No se pudo obtener el título" });
         }
