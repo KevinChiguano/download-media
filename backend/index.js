@@ -15,10 +15,18 @@ const binDir = path.join(__dirname, "bin");
 const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
 const ffmpegDir = binDir;
 
-// Detectar cookies
+// Detectar cookies y caché de tokens
 const cookiesPath = path.join(__dirname, "cookies.txt");
+const cacheDir = path.join(__dirname, ".cache-yt-dlp");
+
 const getBaseArgs = () => {
-    const args = ["--js-runtimes", "node"];
+    // Usamos OAuth2 y un directorio de caché local para que no caduque la sesión
+    const args = [
+        "--js-runtimes", "node",
+        "--cache-dir", cacheDir,
+        "--username", "oauth2",
+        "--password", ""
+    ];
     if (fs.existsSync(cookiesPath)) {
         args.push("--cookies", cookiesPath);
     }
