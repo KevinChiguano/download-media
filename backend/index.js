@@ -19,10 +19,11 @@ const cookiesPath = path.join(__dirname, "cookies.txt");
 
 // Configuración de argumentos base
 const getBaseArgs = () => {
-    // Usamos suplantación de clientes móviles (android/ios) para saltar el bloqueo de bots
+    // Usamos suplantación de cliente iOS (que suele ser el más permisivo) y un User-Agent real
     const args = [
         "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=android,ios,mweb"
+        "--extractor-args", "youtube:player_client=ios",
+        "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
     ];
     if (fs.existsSync(cookiesPath)) {
         args.push("--cookies", cookiesPath);
