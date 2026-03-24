@@ -1,7 +1,7 @@
 <template>
   <div
     class="max-w-xl mx-auto p-4 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-300 dark:border-gray-700 ring-1 ring-gray-100 dark:ring-gray-800 text-gray-800 dark:text-gray-100">
-    <h2 class="text-xl font-bold mb-4">Descargar video de YouTube</h2>
+    <h2 class="text-xl font-bold mb-4">Descargar desde YouTube</h2>
     <form @submit.prevent="handleDownload" class="space-y-4">
       <input v-model="url" type="text" placeholder="Pega aquí el enlace de YouTube"
         class="w-full p-2 border border-gray-300 rounded dark:bg-gray-700 dark:text-white" />
