@@ -17,7 +17,13 @@ const ffmpegDir = binDir;
 
 // Detectar cookies
 const cookiesPath = path.join(__dirname, "cookies.txt");
-const getBaseArgs = () => fs.existsSync(cookiesPath) ? ["--cookies", cookiesPath] : [];
+const getBaseArgs = () => {
+    const args = ["--js-runtimes", "nodejs"];
+    if (fs.existsSync(cookiesPath)) {
+        args.push("--cookies", cookiesPath);
+    }
+    return args;
+};
 
 // Crear directorio de descargas si no existe
 const downloadsDir = path.join(__dirname, "downloads");
