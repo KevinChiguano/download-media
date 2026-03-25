@@ -16,18 +16,27 @@ const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
 const ffmpegDir = binDir;
 
 const cookiesPath = path.join(__dirname, "cookies.txt");
+const poTokenPath = path.join(__dirname, "po_token.txt");
 
 // Configuración de argumentos base
 const getBaseArgs = () => {
-    // Usamos suplantación de cliente iOS (que suele ser el más permisivo) y un User-Agent real
+    // Usamos el cliente 'tv' que según la Wiki es el único que NO requiere PO Token actualmente
     const args = [
         "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=ios",
-        "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        "--extractor-args", "youtube:player_client=tv",
     ];
+
     if (fs.existsSync(cookiesPath)) {
         args.push("--cookies", cookiesPath);
     }
+
+    if (fs.existsSync(poTokenPath)) {
+        const poToken = fs.readFileSync(poTokenPath, "utf8").trim();
+        if (poToken) {
+            args.push("--extractor-args", `youtube:po_token=web+${poToken}`);
+        }
+    }
+
     return args;
 };
 
