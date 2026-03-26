@@ -1,51 +1,14 @@
 const express = require("express");
 const cors = require("cors");
-const { execFile } = require("child_process");
-const fs = require("fs");
 const path = require("path");
-const { v4: uuidv4 } = require("uuid");
+const { spawn } = require("child_process");
+const fs = require("fs");
+const axios = require("axios");
 
 const app = express();
 const PORT = 3001;
 
-const isWindows = process.platform === 'win32';
-const binDir = path.join(__dirname, "bin");
-
-// En Windows usa los ejecutables locales, en Linux y otros asume que están instalados globalmente
-const ytDlpPath = isWindows ? path.join(binDir, "yt-dlp.exe") : "yt-dlp";
-const ffmpegDir = binDir;
-
-const cookiesPath = path.join(__dirname, "cookies.txt");
-const poTokenPath = path.join(__dirname, "po_token.txt");
-
-// Configuración de argumentos base
-const getBaseArgs = () => {
-    // Usamos el cliente 'tv' que según la Wiki es el único que NO requiere PO Token actualmente
-    const args = [
-        "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=tv",
-    ];
-
-    if (fs.existsSync(cookiesPath)) {
-        args.push("--cookies", cookiesPath);
-    }
-
-    if (fs.existsSync(poTokenPath)) {
-        const poToken = fs.readFileSync(poTokenPath, "utf8").trim();
-        if (poToken) {
-            args.push("--extractor-args", `youtube:po_token=web+${poToken}`);
-        }
-    }
-
-    return args;
-};
-
-// Crear directorio de descargas si no existe
-const downloadsDir = path.join(__dirname, "downloads");
-if (!fs.existsSync(downloadsDir)) {
-    fs.mkdirSync(downloadsDir);
-}
-
+// Configuración de CORS
 const corsOptions = {
     origin: [
         'http://localhost:5173',
@@ -55,167 +18,115 @@ const corsOptions = {
     ],
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
-    credentials: false, // o true si usas cookies o Authorization
+    credentials: false,
 };
 
-
-
 app.use(cors(corsOptions));
-
-
-app.options(/^\/.*$/, (req, res) => {
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.sendStatus(200);
-});
-
-
-
 app.use(express.json());
 
-// Obtener miniatura y título usando yt-dlp
-app.post("/api/thumbnail", (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL requerida" });
+// Rutas a los binarios locales
+const BIN_DIR = path.join(__dirname, "bin");
+const YT_DLP = path.join(BIN_DIR, "yt-dlp.exe");
+const FFMPEG = path.join(BIN_DIR, "ffmpeg.exe");
 
-    console.log("Obteniendo miniatura para:", url);
-
-    const args = [...getBaseArgs(), "--dump-json", url];
-    execFile(ytDlpPath, args, (err, stdout, stderr) => {
-        if (err) {
-            console.error("yt-dlp error:", err);
-            console.error("stderr:", stderr);
-            return res.status(500).json({ error: "No se pudo obtener la miniatura" });
-        }
-        try {
-            const info = JSON.parse(stdout);
-            const title = info.title;
-            const thumbnail = info.thumbnail;
-            res.json({ title, thumbnail });
-        } catch (e) {
-            console.error("Error parseando JSON de yt-dlp:", e);
-            return res.status(500).json({ error: "Error al analizar información del video" });
-        }
-    });
+// Log de depuración
+app.use((req, res, next) => {
+    if (req.url === '/favicon.ico') return res.status(204).end();
+    console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    next();
 });
 
+// Helper para obtener metadatos con oEmbed (más fiable y rápido)
+const getYoutubeInfo = async (url) => {
+    try {
+        const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+        const { data } = await axios.get(oembedUrl);
+        return {
+            title: data.title || "video",
+            thumbnail: data.thumbnail_url || ""
+        };
+    } catch (e) {
+        console.error("Error oembed:", e.message);
+        return { title: "video", thumbnail: "" };
+    }
+};
 
-// Descargar video/audio con yt-dlp
+app.get("/", (req, res) => {
+    res.send("Backend funcional (Versión Local con Binarios)");
+});
+
+app.post("/api/thumbnail", async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "URL requerida" });
+    const info = await getYoutubeInfo(url);
+    res.json(info);
+});
+
+app.post("/api/title", async (req, res) => {
+    const { url, format } = req.body;
+    if (!url || !format) return res.status(400).json({ error: "Faltan parámetros" });
+    const info = await getYoutubeInfo(url);
+    let title = info.title.replace(/[^\w\s-]/g, "").replace(/\s+/g, " ").trim() || "video";
+    const ext = format === "mp3" ? "mp3" : "mp4";
+    res.json({ filename: `${title}.${ext}` });
+});
+
 app.post("/api/download", async (req, res) => {
     const { url, format } = req.body;
     if (!url || !format) return res.status(400).json({ error: "Faltan parámetros" });
 
-    // Paso 1: obtener información del video (incluye el título)
-    const dumpArgs = [...getBaseArgs(), "--dump-json", url];
-    execFile(ytDlpPath, dumpArgs, (err, stdout) => {
-        if (err) {
-            console.error("yt-dlp error:", err);
-            return res.status(500).json({ error: "Error al obtener información del video" });
-        }
-
-        let info;
-        try {
-            info = JSON.parse(stdout);
-        } catch (e) {
-            console.error("Error parseando JSON:", e);
-            return res.status(500).json({ error: "Error al leer los datos del video" });
-        }
-
-        let title = info.title || "video";
-        title = title.replace(/[^\w\s-]/g, ""); // sanitizar
-
+    try {
+        const info = await getYoutubeInfo(url);
+        let title = info.title.replace(/[^\w\s-]/g, "").replace(/\s+/g, " ").trim() || "video";
         const ext = format === "mp3" ? "mp3" : "mp4";
-        const outputName = `${title}.${ext}`;
-        const outputPath = path.join(downloadsDir, outputName);
+        const filename = `${title}.${ext}`;
 
-        const ytdlpArgs = [
-            ...getBaseArgs(),
-            url,
-            "-o", outputPath
+        console.log(`Iniciando descarga local: ${filename}`);
+
+        // Configuración de argumentos para yt-dlp
+        let args = [
+            "--no-playlist",
+            "--ffmpeg-location", FFMPEG,
+            "-o", "-", // Salida a stdout para streaming
+            url
         ];
 
-        if (isWindows) {
-            ytdlpArgs.push("--ffmpeg-location", ffmpegDir);
-        }
-
         if (format === "mp3") {
-            ytdlpArgs.push("-x", "--audio-format", "mp3", "--embed-thumbnail", "--add-metadata");
-        } else if (format === "mp4") {
-            ytdlpArgs.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4");
+            args.push("-x", "--audio-format", "mp3", "--audio-quality", "0");
+            res.setHeader("Content-Type", "audio/mpeg");
         } else {
-            return res.status(400).json({ error: "Formato no soportado" });
+            args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
+            res.setHeader("Content-Type", "video/mp4");
         }
 
-        // Ejecutar yt-dlp
-        execFile(ytDlpPath, ytdlpArgs, (err) => {
-            if (err) {
-                console.error("Error descargando con yt-dlp:", err);
-                return res.status(500).json({ error: "Error al descargar el video" });
-            }
+        res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
 
-            // Asegurar que el archivo exista antes de enviarlo
-            fs.access(outputPath, fs.constants.F_OK, (err) => {
-                if (err) {
-                    console.error("Archivo no encontrado:", outputPath);
-                    return res.status(404).json({ error: "Archivo no encontrado tras descarga" });
-                }
+        const process = spawn(YT_DLP, args);
 
-                // Descargar el archivo
-                fs.stat(outputPath, (err, stats) => {
-                    if (err) {
-                        console.error("Error obteniendo tamaño del archivo:", err);
-                        return res.status(500).json({ error: "No se pudo obtener tamaño del archivo" });
-                    }
+        process.stdout.pipe(res);
 
-                    res.setHeader('Content-Type', format === 'mp3' ? 'audio/mpeg' : 'video/mp4');
-                    res.setHeader('Content-Disposition', `attachment; filename="${outputName}"`);
-                    res.setHeader('Content-Length', stats.size);
-
-                    const stream = fs.createReadStream(outputPath);
-                    stream.pipe(res);
-
-                    res.on('finish', () => {
-                        setTimeout(() => {
-                            fs.unlink(outputPath, () => {
-                                console.log(`Archivo eliminado: ${outputPath}`);
-                            });
-                        }, 5000);
-                    });
-                });
-
-            });
+        process.stderr.on("data", (data) => {
+            // Log de progreso o errores de yt-dlp (opcional)
+            // console.log(`stderr: ${data}`);
         });
-    });
+
+        process.on("close", (code) => {
+            console.log(`Proceso finalizado con código: ${code}`);
+            if (code !== 0 && !res.headersSent) {
+                res.status(500).json({ error: "Error en el proceso de descarga" });
+            }
+        });
+
+        req.on("close", () => {
+            process.kill();
+        });
+
+    } catch (err) {
+        console.error("Error en descarga:", err.message);
+        if (!res.headersSent) res.status(500).json({ error: "Error interno" });
+    }
 });
-
-
-
-app.post("/api/title", (req, res) => {
-    const { url, format } = req.body;
-    if (!url || !format) return res.status(400).json({ error: "Faltan parámetros" });
-
-    const args = [...getBaseArgs(), "--dump-json", url];
-    execFile(ytDlpPath, args, (err, stdout) => {
-        if (err) {
-            return res.status(500).json({ error: "No se pudo obtener el título" });
-        }
-
-        try {
-            const info = JSON.parse(stdout);
-            let title = info.title || "video";
-            title = title.replace(/[^\w\s-]/g, "").replace(/\s+/g, " "); // sanitizar
-            const ext = format === "mp3" ? "mp3" : "mp4";
-            res.json({ filename: `${title}.${ext}` });
-        } catch (e) {
-            return res.status(500).json({ error: "Error al procesar JSON" });
-        }
-    });
-});
-
-
-
 
 app.listen(PORT, () => {
-    console.log(`Servidor escuchando en http://localhost:${PORT}`);
+    console.log(`Servidor local escuchando en http://localhost:${PORT}`);
 });
